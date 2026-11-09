@@ -25,27 +25,32 @@ jobs:
       - name: Extract Android project
         run: |
           ZIP_FILE=$(find . -maxdepth 1 -iname '*.zip' -print -quit)
-          if [ -z "$ZIP_FILE" ]; then
-            echo "ZIP archive not found"
-            exit 1
-          fi
+          test -n "$ZIP_FILE"
           mkdir project
           unzip -q "$ZIP_FILE" -d project
 
+      - name: Find Android project
+        run: |
+          ROOT=$(find project -type f \( -name settings.gradle -o -name settings.gradle.kts \) -print -quit | xargs dirname)
+          test -n "$ROOT"
+          echo "PROJECT_ROOT=$ROOT" >> "$GITHUB_ENV"
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.9'
+
       - name: Build APK
         run: |
-          GRADLEW=$(find project -type f -name gradlew | head -n 1)
-          if [ -z "$GRADLEW" ]; then
-            echo "Gradle wrapper not found"
-            exit 1
-          fi
-          cd "$(dirname "$GRADLEW")"
-          chmod +x gradlew
-          ./gradlew assembleDebug
+          gradle -p "$PROJECT_ROOT" assembleDebug
+          mkdir -p output/apk
+          find "$PROJECT_ROOT" -type f -path '*/build/outputs/apk/debug/*.apk' -exec cp {} output/apk/ \;
+          test -n "$(find output/apk -name '*.apk' -print -quit)"
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
           name: poznai-futbolista-apk
-          path: project/**/build/outputs/apk/debug/*.apk
+          path: output/apk/*.apk
           if-no-files-found: error
+
